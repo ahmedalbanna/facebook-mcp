@@ -142,6 +142,58 @@ async def delete_comment(comment_id: str) -> str:
     return api.dumps(await api.adelete(comment_id, {}))
 
 
+@tool
+async def publish_page_photo(
+    image_url: str, caption: str = "", published: bool = True, page_id: str = ""
+) -> str:
+    """Publish a photo to a Page from a public image URL.
+
+    Set published=false to upload the photo without posting it (e.g. to attach
+    to a post later); the response includes the photo id.
+    """
+    cfg = config.current()
+    guardrails.require_writes(cfg)
+    pid = _page(page_id)
+    params: dict = {"url": image_url, "published": published}
+    if caption:
+        params["caption"] = caption
+    path = f"{pid}/photos"
+    preview = guardrails.maybe_dry_run(cfg, "POST", path, params)
+    if preview:
+        return api.dumps(preview)
+    return api.dumps(await api.apost(path, params))
+
+
+@tool
+async def schedule_page_post(
+    message: str, scheduled_publish_time: int, link: str = "", page_id: str = ""
+) -> str:
+    """Schedule a Page post for a future time.
+
+    scheduled_publish_time is a Unix timestamp in seconds, which Meta requires to
+    be between 10 minutes and ~6 months from now.
+    """
+    cfg = config.current()
+    guardrails.require_writes(cfg)
+    if int(scheduled_publish_time) <= 0:
+        return api.dumps(
+            {"error": "scheduled_publish_time must be a positive Unix timestamp (seconds)."}
+        )
+    pid = _page(page_id)
+    params: dict = {
+        "message": message,
+        "published": False,
+        "scheduled_publish_time": int(scheduled_publish_time),
+    }
+    if link:
+        params["link"] = link
+    path = f"{pid}/feed"
+    preview = guardrails.maybe_dry_run(cfg, "POST", path, params)
+    if preview:
+        return api.dumps(preview)
+    return api.dumps(await api.apost(path, params))
+
+
 READ_TOOLS = [
     list_pages,
     get_page,
@@ -152,6 +204,8 @@ READ_TOOLS = [
 ]
 WRITE_TOOLS = [
     create_page_post,
+    publish_page_photo,
+    schedule_page_post,
     update_post,
     delete_post,
     comment_on_object,
