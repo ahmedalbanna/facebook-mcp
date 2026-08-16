@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from facebook_mcp import config
@@ -56,3 +58,30 @@ def test_defaults_are_safe():
     assert cfg.enable_writes is False
     assert cfg.ads_allow_activate is False
     assert cfg.api_version == "v26.0"
+
+
+def test_load_env_file_populates_without_override(tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "# a comment\n"
+        "\n"
+        "export FB_ZZ_TOKEN=fromfile\n"
+        'FB_ZZ_QUOTED="quoted value"\n'
+        "FB_ZZ_EXISTING=fromfile\n"
+        "not a valid line\n"
+    )
+    saved = dict(os.environ)
+    try:
+        os.environ["FB_ZZ_EXISTING"] = "fromenv"  # real env must win
+        loaded = config.load_env_file(env_path)
+        assert loaded == str(env_path)
+        assert os.environ["FB_ZZ_TOKEN"] == "fromfile"
+        assert os.environ["FB_ZZ_QUOTED"] == "quoted value"
+        assert os.environ["FB_ZZ_EXISTING"] == "fromenv"
+    finally:
+        os.environ.clear()
+        os.environ.update(saved)
+
+
+def test_load_env_file_missing_is_noop(tmp_path):
+    assert config.load_env_file(tmp_path / "does-not-exist.env") is None

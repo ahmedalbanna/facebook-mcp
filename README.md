@@ -43,6 +43,11 @@ production. Validate without starting a server:
 python -m facebook_mcp --check-config     # prints a secret-free summary
 ```
 
+On startup the server loads `.env` from the current directory (or the path in
+`FB_ENV_FILE`) into the environment. It **never overrides** variables already set,
+so a real shell export or docker-compose `env_file:` always wins — the file is
+just a convenience for local runs. `--check-config` reports which file was loaded.
+
 ### Access tokens & scopes
 
 Today the server authenticates with a **long-lived access token** (the auth

@@ -11,10 +11,58 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from facebook_mcp.errors import ConfigError
 
 DEFAULT_API_VERSION = "v26.0"
+
+
+def _strip_quotes(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        return value[1:-1]
+    return value
+
+
+def load_env_file(path: str | os.PathLike | None = None) -> str | None:
+    """Populate ``os.environ`` from a ``.env`` file, without clobbering real env.
+
+    A dependency-free loader (the sibling gateway ships no python-dotenv). It is a
+    no-op when the file is absent, and it NEVER overrides a variable already set in
+    the environment, so docker-compose ``env_file:`` and shell exports still win.
+    Values are never logged. Lines may use ``KEY=VALUE`` with an optional ``export``
+    prefix and surrounding quotes; blank lines and ``#`` comments are ignored.
+
+    Search order when ``path`` is omitted: ``FB_ENV_FILE`` if set, else ``.env`` in
+    the current directory, else ``.env`` beside the project root. Returns the path
+    that was loaded, or ``None``.
+    """
+    if path is not None:
+        candidates = [Path(path)]
+    elif os.environ.get("FB_ENV_FILE"):
+        candidates = [Path(os.environ["FB_ENV_FILE"])]
+    else:
+        candidates = [Path.cwd() / ".env", Path(__file__).resolve().parent.parent / ".env"]
+
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        try:
+            text = candidate.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise ConfigError(f"env file {str(candidate)!r} could not be read: {exc}") from exc
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            if line.startswith("export "):
+                line = line[len("export "):].lstrip()
+            key, _, value = line.partition("=")
+            key = key.strip()
+            if key and key not in os.environ:
+                os.environ[key] = _strip_quotes(value.strip())
+        return str(candidate)
+    return None
 
 
 def _file_secret(value: str | None, file_env: str) -> str | None:

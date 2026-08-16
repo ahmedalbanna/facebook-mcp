@@ -41,12 +41,13 @@ def _usage() -> str:
     )
 
 
-def _check_config(cfg: "_config.Config") -> int:
+def _check_config(cfg: "_config.Config", env_file: str | None = None) -> int:
     """Print a configuration summary that never reveals secret values."""
     def yn(v: object) -> str:
         return "yes" if v else "no"
 
     print("facebook-mcp configuration:")
+    print(f"  env file loaded       : {env_file or '-'}")
     print(f"  access token set      : {yn(cfg.access_token)}")
     print(f"  app id set            : {yn(cfg.app_id)}")
     print(f"  app secret set        : {yn(cfg.app_secret)}  (appsecret_proof: "
@@ -118,10 +119,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: unknown argument {arg!r}", file=sys.stderr)
             return 2
 
+    # Load a .env file into the environment (no-op if absent; never overrides
+    # variables already set, so shell/compose env_file still win). CLI flags
+    # like --enable-writes were applied above and therefore take precedence.
+    env_file_loaded = _config.load_env_file()
     cfg = _config.reload()
 
     if check_config_mode:
-        return _check_config(cfg)
+        return _check_config(cfg, env_file_loaded)
 
     app = build_app(cfg)
 
