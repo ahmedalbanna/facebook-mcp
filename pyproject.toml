@@ -16,6 +16,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Excel (.xlsx) report output. CSV report output needs nothing beyond the base
+# install; only generate_*_report(fmt="xlsx") requires this extra.
+reports = [
+    "pandas>=2.0",
+    "openpyxl>=3.1",
+]
 dev = [
     "ruff>=0.1.0",
     "mypy>=1.0.0",
