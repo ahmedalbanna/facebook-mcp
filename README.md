@@ -14,6 +14,8 @@ It exposes the Graph and Marketing API surfaces as MCP tools:
 - **Instagram** — IG Business account, media, comments, insights, and
   photo / video / reel / story publishing
 - **Messenger** — conversations, messages, and the Send API
+- **Media** — view images/creatives inline (no manual download) and save media
+  files to disk
 
 It also serves **resources** (live account snapshots) and **prompts** (ad-copy
 and reporting templates) for MCP clients that surface them.
@@ -127,6 +129,10 @@ claude mcp add --transport http facebook http://127.0.0.1:8020/mcp
   SHA-256 hashed on this machine; only hashes leave the process.
 - **Reports confined** — report files are only written inside `FB_REPORT_DIR`;
   a caller-supplied filename cannot escape that directory.
+- **Media fetches guarded** — the media tools fetch only from Meta's own CDN
+  hosts (raw-IP hosts refused, redirects re-validated per hop, size- and
+  time-capped), and `save_media` writes only inside `FB_MEDIA_DIR` (basename
+  only, cannot escape).
 - **Secrets** — never logged; read from env or mode-600 files. `--check-config`
   reports presence, never values.
 
@@ -144,10 +150,13 @@ Diagnostics: `whoami`, `debug_token`, `fb_get` (+ gated `fb_post`, `fb_delete`).
 | Automation | `list_auto_rules` | `create_auto_rule`, `delete_auto_rule` |
 | Instagram | `discover_ig_user`, `get_ig_account`, `list_ig_media`, `get_ig_media`, `list_ig_comments`, `get_ig_insights`, `get_ig_media_insights`, `get_ig_container_status` | `create_ig_media_container`, `publish_ig_media`, `publish_ig_photo`, `publish_ig_video`, `publish_ig_reel`, `publish_ig_story`, `reply_to_ig_comment`, `delete_ig_comment` |
 | Messenger | `list_conversations`, `list_messages` | `send_message`, `send_image` |
+| Media | `view_image`, `view_ig_media`, `view_ad_creative`, `save_media` | *(read-only)* |
 
-Every tool returns a JSON string. Errors come back as structured
-`{"error": ...}` payloads (with Graph `code`/`subcode`/`fbtrace_id` where
-available) rather than exceptions.
+Most tools return a JSON string; the media **view** tools (`view_image`,
+`view_ig_media`, `view_ad_creative`) instead return inline image content the
+model can look at directly. Errors come back as structured `{"error": ...}`
+payloads (with Graph `code`/`subcode`/`fbtrace_id` where available) rather than
+exceptions.
 
 **Notes on specific tools:**
 
@@ -165,6 +174,13 @@ available) rather than exceptions.
   in progress it returns `{"pending": true, "creation_id": ...}` so you can
   publish later with `publish_ig_media` once `get_ig_container_status` reports
   `FINISHED`.
+- **Media** — `view_image` / `view_ig_media` / `view_ad_creative` fetch media
+  from Meta's CDN and return it **inline** so the model can see it without
+  downloading first; for a video or reel they show the poster/thumbnail frame
+  (models can't watch video). `save_media` downloads the actual file (image or
+  video) into `FB_MEDIA_DIR`. Fetches are SSRF-guarded: only Meta CDN hosts are
+  allowed, raw-IP hosts refused, redirects re-validated per hop, and responses
+  size-capped (12 MB inline / 100 MB save) and time-bounded.
 
 ## Resources & prompts
 

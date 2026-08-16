@@ -18,6 +18,7 @@ from facebook_mcp.tools import (
     common,
     insights,
     instagram,
+    media,
     messenger,
     pages,
     reports,
@@ -50,10 +51,20 @@ and Marketing APIs. You NEVER invent tool names or object ids.
 # Tool calling
 Call tools with the exact JSON schema shown. For endpoints without a dedicated
 tool, use fb_get (read) or, when writes are enabled, fb_post / fb_delete.
+
+# Viewing media
+To SEE an image, do NOT download it yourself — call view_image with the media
+URL (Instagram media_url, a Page photo's full_picture, an ad creative image_url,
+etc.) and it is returned to you inline. view_ig_media(media_id) and
+view_ad_creative(creative_id) resolve the object for you; for a video or reel
+they show the poster/thumbnail frame. You cannot watch a video — if you need the
+actual file, save_media downloads it to FB_MEDIA_DIR and returns the path.
 """
 
 # Module order controls tool listing order; common (diagnostics) first.
-_MODULES = [common, pages, ads, audiences, insights, reports, automation, instagram, messenger]
+_MODULES = [
+    common, pages, ads, audiences, insights, reports, automation, instagram, messenger, media
+]
 
 
 # ---------------------------------------------------------------------------

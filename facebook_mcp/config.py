@@ -134,6 +134,8 @@ class Config:
 
     # Directory reports may be written to (FB_REPORT_DIR); empty disables file output.
     report_dir: str | None = None
+    # Directory media downloads may be saved to (FB_MEDIA_DIR); empty disables save_media.
+    media_dir: str | None = None
 
     def require_token(self) -> str:
         if not self.access_token:
@@ -177,6 +179,7 @@ class Config:
             ads_max_lifetime_budget=_env_int("FB_ADS_MAX_LIFETIME_BUDGET", 0),
             timeout=_env_int("FB_TIMEOUT", 30),
             report_dir=os.environ.get("FB_REPORT_DIR") or None,
+            media_dir=os.environ.get("FB_MEDIA_DIR") or None,
         )
 
 
