@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "facebook-mcp"
+version = "0.1.0"
+description = "Facebook / Meta MCP server - Pages, Ads (Marketing API), Instagram and Messenger over the official facebook-business SDK"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=3.0,<4",
+    "mcp>=1.0",
+    "facebook_business>=18.0",
+    "uvicorn>=0.30",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23",
+    "build>=1.0",
+]
+
+[project.scripts]
+facebook-mcp = "facebook_mcp.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["facebook_mcp*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores = false
+files = ["facebook_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+asyncio_mode = "auto"
