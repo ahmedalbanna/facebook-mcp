@@ -9,6 +9,7 @@ currency.
 
 from __future__ import annotations
 
+import base64
 import json
 
 from facebook_mcp import api, config, guardrails
@@ -98,6 +99,26 @@ async def get_ad_insights(
     obj = object_id.strip() or _acct("")
     params = {"level": level, "date_preset": date_preset, "fields": fields}
     return api.dumps(await api.aget(f"{obj}/insights", params))
+
+
+@tool
+async def get_campaign(campaign_id: str) -> str:
+    """Get a single campaign's objective, status and budget."""
+    return api.dumps(await api.aget(campaign_id, {"fields": _CAMPAIGN_FIELDS}))
+
+
+@tool
+async def get_adset(adset_id: str) -> str:
+    """Get a single ad set's optimization goal, billing event, budget and targeting."""
+    return api.dumps(
+        await api.aget(adset_id, {"fields": f"{_ADSET_FIELDS},targeting"})
+    )
+
+
+@tool
+async def get_ad(ad_id: str) -> str:
+    """Get a single ad, including its linked ad set and creative."""
+    return api.dumps(await api.aget(ad_id, {"fields": _AD_FIELDS}))
 
 
 # ---- writes (gated by FB_ENABLE_WRITES + ad-spend guardrails) -------------
@@ -231,17 +252,249 @@ async def create_adset(
     return api.dumps(await api.apost(path, params))
 
 
+@tool
+async def delete_campaign(campaign_id: str) -> str:
+    """Delete a campaign along with its ad sets and ads."""
+    cfg = config.current()
+    guardrails.require_writes(cfg)
+    preview = guardrails.maybe_dry_run(cfg, "DELETE", campaign_id, {})
+    if preview:
+        return api.dumps(preview)
+    return api.dumps(await api.adelete(campaign_id, {}))
+
+
+@tool
+async def update_campaign_budget(
+    campaign_id: str, daily_budget: int = 0, lifetime_budget: int = 0
+) -> str:
+    """Update a campaign's daily or lifetime budget (minor currency units)."""
+    cfg = config.current()
+    guardrails.require_writes(cfg)
+    guardrails.check_budget(cfg, daily=daily_budget, lifetime=lifetime_budget)
+    params: dict = {}
+    if daily_budget:
+        params["daily_budget"] = int(daily_budget)
+    if lifetime_budget:
+        params["lifetime_budget"] = int(lifetime_budget)
+    if not params:
+        return api.dumps({"error": "Provide daily_budget or lifetime_budget (minor units)."})
+    preview = guardrails.maybe_dry_run(cfg, "POST", campaign_id, params)
+    if preview:
+        return api.dumps(preview)
+    return api.dumps(await api.apost(campaign_id, params))
+
+
+@tool
+async def update_adset_status(adset_id: str, status: str) -> str:
+    """Pause or activate an ad set (ACTIVE requires FB_ADS_ALLOW_ACTIVATE)."""
+    cfg = config.current()
+    guardrails.require_writes(cfg)
+    params = {"status": guardrails.enforce_status(cfg, status)}
+    preview = guardrails.maybe_dry_run(cfg, "POST", adset_id, params)
+    if preview:
+        return api.dumps(preview)
+    return api.dumps(await api.apost(adset_id, params))
+
+
+@tool
+async def update_adset_budget(
+    adset_id: str, daily_budget: int = 0, lifetime_budget: int = 0
+) -> str:
+    """Update an ad set's daily or lifetime budget (minor currency units)."""
+    cfg = config.current()
+    guardrails.require_writes(cfg)
+    guardrails.check_budget(cfg, daily=daily_budget, lifetime=lifetime_budget)
+    params: dict = {}
+    if daily_budget:
+        params["daily_budget"] = int(daily_budget)
+    if lifetime_budget:
+        params["lifetime_budget"] = int(lifetime_budget)
+    if not params:
+        return api.dumps({"error": "Provide daily_budget or lifetime_budget (minor units)."})
+    preview = guardrails.maybe_dry_run(cfg, "POST", adset_id, params)
+    if preview:
+        return api.dumps(preview)
+    return api.dumps(await api.apost(adset_id, params))
+
+
+@tool
+async def update_adset_targeting(adset_id: str, targeting_json: str) -> str:
+    """Replace an ad set's targeting spec (a JSON object)."""
+    cfg = config.current()
+    guardrails.require_writes(cfg)
+    params = {"targeting": json.dumps(parse_params(targeting_json))}
+    preview = guardrails.maybe_dry_run(cfg, "POST", adset_id, params)
+    if preview:
+        return api.dumps(preview)
+    return api.dumps(await api.apost(adset_id, params))
+
+
+@tool
+async def create_ad(
+    name: str,
+    adset_id: str,
+    creative_id: str,
+    ad_account_id: str = "",
+    status: str = "PAUSED",
+) -> str:
+    """Create an ad (PAUSED by default) linking an ad set to an existing creative."""
+    cfg = config.current()
+    guardrails.require_writes(cfg)
+    status = guardrails.enforce_status(cfg, status)
+    params = {
+        "name": name,
+        "adset_id": adset_id,
+        "creative": json.dumps({"creative_id": creative_id}),
+        "status": status,
+    }
+    path = f"{_acct(ad_account_id)}/ads"
+    preview = guardrails.maybe_dry_run(cfg, "POST", path, params)
+    if preview:
+        return api.dumps(preview)
+    return api.dumps(await api.apost(path, params))
+
+
+@tool
+async def update_ad_status(ad_id: str, status: str) -> str:
+    """Pause or activate an ad (ACTIVE requires FB_ADS_ALLOW_ACTIVATE)."""
+    cfg = config.current()
+    guardrails.require_writes(cfg)
+    params = {"status": guardrails.enforce_status(cfg, status)}
+    preview = guardrails.maybe_dry_run(cfg, "POST", ad_id, params)
+    if preview:
+        return api.dumps(preview)
+    return api.dumps(await api.apost(ad_id, params))
+
+
+@tool
+async def create_ad_creative(
+    name: str, object_story_spec_json: str, ad_account_id: str = ""
+) -> str:
+    """Create an ad creative from a raw object_story_spec (a JSON object).
+
+    See ``create_link_ad_creative`` for a simpler link-ad helper that builds the
+    spec for you.
+    """
+    cfg = config.current()
+    guardrails.require_writes(cfg)
+    spec = parse_params(object_story_spec_json)
+    params = {"name": name, "object_story_spec": json.dumps(spec)}
+    path = f"{_acct(ad_account_id)}/adcreatives"
+    preview = guardrails.maybe_dry_run(cfg, "POST", path, params)
+    if preview:
+        return api.dumps(preview)
+    return api.dumps(await api.apost(path, params))
+
+
+@tool
+async def create_link_ad_creative(
+    name: str,
+    link: str,
+    page_id: str = "",
+    message: str = "",
+    image_hash: str = "",
+    picture: str = "",
+    call_to_action_type: str = "",
+    ad_account_id: str = "",
+) -> str:
+    """Create a link ad creative without hand-writing the object_story_spec.
+
+    image_hash comes from ``upload_ad_image``; picture is an image URL as an
+    alternative. call_to_action_type is e.g. LEARN_MORE, SHOP_NOW, SIGN_UP.
+    """
+    cfg = config.current()
+    guardrails.require_writes(cfg)
+    pid = need(page_id, cfg.page_id, "page_id", "FB_PAGE_ID")
+    link_data: dict = {"link": link}
+    if message:
+        link_data["message"] = message
+    if image_hash:
+        link_data["image_hash"] = image_hash
+    if picture:
+        link_data["picture"] = picture
+    if call_to_action_type:
+        link_data["call_to_action"] = {
+            "type": call_to_action_type,
+            "value": {"link": link},
+        }
+    spec = {"page_id": pid, "link_data": link_data}
+    params = {"name": name, "object_story_spec": json.dumps(spec)}
+    path = f"{_acct(ad_account_id)}/adcreatives"
+    preview = guardrails.maybe_dry_run(cfg, "POST", path, params)
+    if preview:
+        return api.dumps(preview)
+    return api.dumps(await api.apost(path, params))
+
+
+@tool
+async def upload_ad_image(image_path: str, ad_account_id: str = "") -> str:
+    """Upload a local image for ad creatives; returns its image hash.
+
+    Reads the file, base64-encodes it and POSTs to /act_<id>/adimages. Use the
+    returned hash as ``image_hash`` in ``create_link_ad_creative``.
+    """
+    cfg = config.current()
+    guardrails.require_writes(cfg)
+    try:
+        with open(image_path, "rb") as fh:
+            raw = fh.read()
+    except OSError as exc:
+        return api.dumps({"error": f"Could not read image {image_path!r}: {exc}"})
+    path = f"{_acct(ad_account_id)}/adimages"
+    preview = guardrails.maybe_dry_run(
+        cfg, "POST", path, {"bytes": f"<{len(raw)} bytes, base64>"}
+    )
+    if preview:
+        return api.dumps(preview)
+    encoded = base64.b64encode(raw).decode("ascii")
+    return api.dumps(await api.apost(path, {"bytes": encoded}))
+
+
+@tool
+async def upload_ad_video(video_url: str, ad_account_id: str = "") -> str:
+    """Register a video for ads from a publicly reachable URL (/act_<id>/advideos).
+
+    Chunked local-file upload is not supported here; host the file and pass its
+    URL. Returns the new video id.
+    """
+    cfg = config.current()
+    guardrails.require_writes(cfg)
+    url = video_url.strip()
+    if not url:
+        return api.dumps({"error": "video_url is required (a publicly reachable URL)."})
+    path = f"{_acct(ad_account_id)}/advideos"
+    params = {"file_url": url}
+    preview = guardrails.maybe_dry_run(cfg, "POST", path, params)
+    if preview:
+        return api.dumps(preview)
+    return api.dumps(await api.apost(path, params))
+
+
 READ_TOOLS = [
     list_ad_accounts,
     get_ad_account,
     list_campaigns,
     list_adsets,
     list_ads,
+    get_campaign,
+    get_adset,
+    get_ad,
     get_ad_insights,
 ]
 WRITE_TOOLS = [
     create_campaign,
     update_campaign,
+    update_campaign_budget,
     set_campaign_status,
+    delete_campaign,
     create_adset,
+    update_adset_status,
+    update_adset_budget,
+    update_adset_targeting,
+    create_ad,
+    update_ad_status,
+    create_ad_creative,
+    create_link_ad_creative,
+    upload_ad_image,
+    upload_ad_video,
 ]
