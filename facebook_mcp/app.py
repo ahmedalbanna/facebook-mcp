@@ -11,7 +11,16 @@ from typing import Any
 
 from facebook_mcp import api
 from facebook_mcp import config as _config
-from facebook_mcp.tools import ads, audiences, common, instagram, messenger, pages
+from facebook_mcp.tools import (
+    ads,
+    audiences,
+    common,
+    insights,
+    instagram,
+    messenger,
+    pages,
+    reports,
+)
 
 SYSTEM_INSTRUCTIONS = """# Role
 You operate a Facebook / Meta account through MCP tools that call Meta's Graph
@@ -43,7 +52,7 @@ tool, use fb_get (read) or, when writes are enabled, fb_post / fb_delete.
 """
 
 # Module order controls tool listing order; common (diagnostics) first.
-_MODULES = [common, pages, ads, audiences, instagram, messenger]
+_MODULES = [common, pages, ads, audiences, insights, reports, instagram, messenger]
 
 
 def build_app(cfg: "_config.Config | None" = None) -> Any:

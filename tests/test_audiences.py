@@ -120,13 +120,11 @@ async def test_delete_custom_audience(fake, cfg_writes):
     assert fake.last()[:2] == ("DELETE", "AUD1")
 
 
-def test_audiences_registered():
-    import asyncio
-
+async def test_audiences_registered():
     from facebook_mcp import app as appmod
 
     rw = appmod.build_app(config.Config(access_token="t", enable_writes=True))
-    names = {t.name for t in asyncio.run(rw.list_tools())}
+    names = {t.name for t in await rw.list_tools()}
     config._config = None
     assert "list_custom_audiences" in names
     assert "add_users_to_audience" in names

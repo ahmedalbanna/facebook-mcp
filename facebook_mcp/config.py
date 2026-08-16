@@ -132,6 +132,9 @@ class Config:
 
     timeout: int = 30
 
+    # Directory reports may be written to (FB_REPORT_DIR); empty disables file output.
+    report_dir: str | None = None
+
     def require_token(self) -> str:
         if not self.access_token:
             raise ConfigError(
@@ -173,6 +176,7 @@ class Config:
             ads_max_daily_budget=_env_int("FB_ADS_MAX_DAILY_BUDGET", 0),
             ads_max_lifetime_budget=_env_int("FB_ADS_MAX_LIFETIME_BUDGET", 0),
             timeout=_env_int("FB_TIMEOUT", 30),
+            report_dir=os.environ.get("FB_REPORT_DIR") or None,
         )
 
 
